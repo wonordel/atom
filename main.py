@@ -104,6 +104,8 @@ while running:
                     elif i == 5: s.value = sim.magnet_strength
                     elif i == 6: s.value = sim.sim_fps
                     elif i == 7: s.value = sim.render_fps
+            elif event.key == pygame.K_l:
+                ui.toggle_language()
 
         if event.type == pygame.MOUSEBUTTONDOWN:
             mx, my = pygame.mouse.get_pos()

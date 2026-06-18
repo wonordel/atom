@@ -256,27 +256,33 @@ class Simulator:
                 forces_x[j] -= fx
                 forces_y[j] -= fy
 
+        # External attraction (new modes)
         if self.external_attraction != ATTRACT_NONE:
             center_x = (UI_WIDTH + WIDTH) * 0.5
             center_y = HEIGHT * 0.5
-            for i, atom in enumerate(self.atoms):
-                if self.external_attraction == ATTRACT_CENTER:
-                    dx = center_x - atom.x
-                    dy = center_y - atom.y
+            target_x = target_y = None
+            if self.external_attraction == ATTRACT_CENTER:
+                target_x, target_y = center_x, center_y
+            elif self.external_attraction == ATTRACT_TOP_CENTER:
+                target_x, target_y = center_x, 0.0
+            elif self.external_attraction == ATTRACT_BOTTOM_CENTER:
+                target_x, target_y = center_x, float(HEIGHT)
+            elif self.external_attraction == ATTRACT_LEFT_CENTER:
+                target_x, target_y = float(UI_WIDTH), center_y
+            elif self.external_attraction == ATTRACT_RIGHT_CENTER:
+                target_x, target_y = float(WIDTH), center_y
+
+            if target_x is not None:
+                for i, atom in enumerate(self.atoms):
+                    dx = target_x - atom.x
+                    dy = target_y - atom.y
                     dist_sq = dx*dx + dy*dy
                     if dist_sq < 1e-6:
                         continue
                     dist = math.sqrt(dist_sq)
+                    # сила, направленная к точке, пропорциональна strength
                     forces_x[i] += self.strength * dx / dist
                     forces_y[i] += self.strength * dy / dist
-                elif self.external_attraction == ATTRACT_LEFT:
-                    forces_x[i] -= self.strength
-                elif self.external_attraction == ATTRACT_RIGHT:
-                    forces_x[i] += self.strength
-                elif self.external_attraction == ATTRACT_UP:
-                    forces_y[i] -= self.strength
-                elif self.external_attraction == ATTRACT_DOWN:
-                    forces_y[i] += self.strength
 
         if self.magnet_active:
             for i, atom in enumerate(self.atoms):

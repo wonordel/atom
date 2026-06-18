@@ -4,6 +4,13 @@ Languages/Языки:<br>
 English<br>
 [Русский](README.ru.md)
 
+**This project is made by AI**
+
+How to run:
+
+1. Install [Arial](ARIAL.TTF) font (if you are on Linux and you don't have it)
+2. Run main.py in the project folder
+
 Compile (on Linux):
 
 1. Install Python 3.11 via Wine to the path `C:\Python311`
@@ -21,3 +28,4 @@ TODO:
 - [ ] Optimization using GPU
 - [ ] Compilation for Linux on Linux
 - [ ] Compilation for Windows on Windows
+- [ ] 
