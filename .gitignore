@@ -1,0 +1,6 @@
+chatgpt.txt
+dist
+build
+__pycache__
+.build-windows
+atom.spec
