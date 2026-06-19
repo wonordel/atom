@@ -1,11 +1,80 @@
 import math
 import random
+from itertools import combinations
 from settings import *
-from atom import Atom
-from wall import Wall
+from entities import Atom, Wall
+
+# ----------------------------------------------------------------------
+# Функция для параллельного вычисления сил для группы атомов
+# ----------------------------------------------------------------------
+def _compute_forces_for_group(args):
+    """
+    args: (indices, atoms_list, strength, interaction_radius,
+           min_dist, mode, target_dist, charge_forces_enabled)
+    Возвращает список кортежей (i, fx, fy) для каждого i в indices.
+    """
+    (indices, atoms, strength, interaction_radius,
+     min_dist, mode, target_dist, charge_forces_enabled) = args
+
+    n = len(atoms)
+    # Локальные результаты для этой группы
+    result = []
+    # Для каждого атома из группы вычисляем силу от всех остальных
+    for i in indices:
+        a1 = atoms[i]
+        fx_total = 0.0
+        fy_total = 0.0
+        for j in range(n):
+            if i == j:
+                continue
+            a2 = atoms[j]
+            dx = a2.x - a1.x
+            dy = a2.y - a1.y
+            dist_sq = dx*dx + dy*dy
+            if dist_sq < 1e-6 or dist_sq > interaction_radius*interaction_radius:
+                continue
+            dist = math.sqrt(dist_sq)
+            r = max(dist, min_dist)
+            dir_x = dx / r
+            dir_y = dy / r
+
+            if charge_forces_enabled and a1.charge != 0 and a2.charge != 0:
+                mag = strength / r
+                if a1.charge == a2.charge:
+                    fx = -mag * dir_x
+                    fy = -mag * dir_y
+                else:
+                    fx = mag * dir_x
+                    fy = mag * dir_y
+                fx_total += fx
+                fy_total += fy
+                continue
+
+            if mode == 0:  # MODE_REPEL
+                mag = strength / r
+                fx = -mag * dir_x
+                fy = -mag * dir_y
+            elif mode == 1:  # MODE_ATTRACT
+                mag = strength / r
+                fx = mag * dir_x
+                fy = mag * dir_y
+            else:  # MODE_KEEP_DIST
+                delta = r - target_dist
+                stiffness = strength * 0.05 / max(target_dist, 1.0)
+                max_mag = strength * 2.0 / max(min_dist, 1.0)
+                mag = max(-max_mag, min(max_mag, stiffness * delta))
+                fx = mag * dir_x
+                fy = mag * dir_y
+
+            fx_total += fx
+            fy_total += fy
+
+        result.append((i, fx_total, fy_total))
+    return result
+
 
 class Simulator:
-    def __init__(self):
+    def __init__(self, pool=None):
         self.atoms = []
         self.walls = []
         self.boundaries_enabled = True
@@ -27,6 +96,12 @@ class Simulator:
         self.magnet_active = False
         self.magnet_x = 0
         self.magnet_y = 0
+        self.atom_radius = DEFAULT_ATOM_RADIUS
+
+        self.pool = pool
+        if self.pool is None:
+            import multiprocessing as mp
+            self.pool = mp.Pool(processes=mp.cpu_count())
 
         self.boundary_walls = [
             Wall(UI_WIDTH, 0, WIDTH, 0),
@@ -36,6 +111,11 @@ class Simulator:
         ]
         self.update_active_walls()
         self.add_random_atoms(40)
+
+    def set_atom_radius(self, new_radius):
+        self.atom_radius = new_radius
+        for atom in self.atoms:
+            atom.radius = new_radius
 
     def update_active_walls(self):
         if self.boundaries_enabled:
@@ -47,12 +127,12 @@ class Simulator:
         for _ in range(count):
             x = random.uniform(UI_WIDTH + 50, WIDTH - 50)
             y = random.uniform(50, HEIGHT - 50)
-            self.atoms.append(Atom(x, y, charge=ATOM_NEUTRAL))
+            self.atoms.append(Atom(x, y, charge=ATOM_NEUTRAL, radius=self.atom_radius))
 
     def add_atom(self, x, y, charge=None):
         if charge is None:
             charge = self.selected_atom_charge
-        self.atoms.append(Atom(x, y, charge=charge))
+        self.atoms.append(Atom(x, y, charge=charge, radius=self.atom_radius))
 
     def add_atom_outside(self):
         side = random.choice(['top', 'bottom', 'left', 'right'])
@@ -69,7 +149,7 @@ class Simulator:
         else:
             x = WIDTH + margin
             y = random.uniform(-margin, HEIGHT + margin)
-        atom = Atom(x, y, charge=ATOM_NEUTRAL)
+        atom = Atom(x, y, charge=ATOM_NEUTRAL, radius=self.atom_radius)
         atom.vx = random.uniform(-50, 50)
         atom.vy = random.uniform(-50, 50)
         self.atoms.append(atom)
@@ -96,6 +176,7 @@ class Simulator:
         self.update_active_walls()
 
     def compute_force(self, a1, a2):
+        # Оставлен для последовательного режима (не используется при параллельном)
         dx = a2.x - a1.x
         dy = a2.y - a1.y
         dist_sq = dx*dx + dy*dy
@@ -107,7 +188,7 @@ class Simulator:
         r = max(dist, self.min_dist)
         dir_x = dx / r
         dir_y = dy / r
-        if self.charge_forces_enabled and a1.charge != ATOM_NEUTRAL and a2.charge != ATOM_NEUTRAL:
+        if self.charge_forces_enabled and a1.charge != 0 and a2.charge != 0:
             mag = self.strength / r
             if a1.charge == a2.charge:
                 fx = -mag * dir_x
@@ -137,19 +218,6 @@ class Simulator:
         self.magnet_active = active
         self.magnet_x = mx
         self.magnet_y = my
-
-    def apply_magnetic_force(self, mx, my):
-        for atom in self.atoms:
-            dx = mx - atom.x
-            dy = my - atom.y
-            dist_sq = dx*dx + dy*dy
-            if dist_sq < 1e-6:
-                continue
-            dist = math.sqrt(dist_sq)
-            mag = self.magnet_strength / (dist + 20.0)
-            mag = min(mag, 2000.0)
-            atom.vx += mag * dx / dist / atom.mass
-            atom.vy += mag * dy / dist / atom.mass
 
     def _keep_atom_inside_bounds(self, atom):
         left = UI_WIDTH + atom.radius
@@ -246,44 +314,132 @@ class Simulator:
 
     def _update_step(self, dt):
         n = len(self.atoms)
-        forces_x = [0.0]*n
-        forces_y = [0.0]*n
-        for i in range(n):
-            for j in range(i+1, n):
-                fx, fy = self.compute_force(self.atoms[i], self.atoms[j])
-                forces_x[i] += fx
-                forces_y[i] += fy
-                forces_x[j] -= fx
-                forces_y[j] -= fy
+        if n == 0:
+            return
 
-        # External attraction (new modes)
+        forces_x = [0.0] * n
+        forces_y = [0.0] * n
+
+        # Если атомов мало – используем последовательный код (меньше накладных расходов)
+        PARALLEL_THRESHOLD = 80
+        if n < PARALLEL_THRESHOLD:
+            for i in range(n):
+                for j in range(i + 1, n):
+                    fx, fy = self.compute_force(self.atoms[i], self.atoms[j])
+                    forces_x[i] += fx
+                    forces_y[i] += fy
+                    forces_x[j] -= fx
+                    forces_y[j] -= fy
+        else:
+            # Разбиваем индексы на группы по числу процессов
+            num_procs = self.pool._processes  # количество процессов в пуле
+            indices = list(range(n))
+            # Разбиваем на примерно равные группы
+            group_size = max(1, n // num_procs)
+            groups = [indices[i:i+group_size] for i in range(0, n, group_size)]
+
+            # Подготавливаем аргументы для каждой группы
+            args_list = []
+            for group in groups:
+                args = (group, self.atoms, self.strength, self.interaction_radius,
+                        self.min_dist, self.mode, self.target_dist, self.charge_forces_enabled)
+                args_list.append(args)
+
+            # Параллельный вызов
+            results = self.pool.map(_compute_forces_for_group, args_list)
+
+            # Собираем силы
+            for res in results:
+                for i, fx, fy in res:
+                    forces_x[i] += fx
+                    forces_y[i] += fy
+
+        # Внешнее притяжение (последовательно)
         if self.external_attraction != ATTRACT_NONE:
-            center_x = (UI_WIDTH + WIDTH) * 0.5
-            center_y = HEIGHT * 0.5
-            target_x = target_y = None
             if self.external_attraction == ATTRACT_CENTER:
-                target_x, target_y = center_x, center_y
-            elif self.external_attraction == ATTRACT_TOP_CENTER:
-                target_x, target_y = center_x, 0.0
-            elif self.external_attraction == ATTRACT_BOTTOM_CENTER:
-                target_x, target_y = center_x, float(HEIGHT)
-            elif self.external_attraction == ATTRACT_LEFT_CENTER:
-                target_x, target_y = float(UI_WIDTH), center_y
-            elif self.external_attraction == ATTRACT_RIGHT_CENTER:
-                target_x, target_y = float(WIDTH), center_y
-
-            if target_x is not None:
+                cx = (UI_WIDTH + WIDTH) * 0.5
+                cy = HEIGHT * 0.5
                 for i, atom in enumerate(self.atoms):
-                    dx = target_x - atom.x
-                    dy = target_y - atom.y
+                    dx = cx - atom.x
+                    dy = cy - atom.y
                     dist_sq = dx*dx + dy*dy
                     if dist_sq < 1e-6:
                         continue
                     dist = math.sqrt(dist_sq)
-                    # сила, направленная к точке, пропорциональна strength
-                    forces_x[i] += self.strength * dx / dist
-                    forces_y[i] += self.strength * dy / dist
+                    factor = self.strength / dist
+                    forces_x[i] += factor * dx
+                    forces_y[i] += factor * dy
 
+            elif self.external_attraction == ATTRACT_LEFT:
+                for i in range(n):
+                    forces_x[i] -= self.strength
+            elif self.external_attraction == ATTRACT_RIGHT:
+                for i in range(n):
+                    forces_x[i] += self.strength
+            elif self.external_attraction == ATTRACT_UP:
+                for i in range(n):
+                    forces_y[i] -= self.strength
+            elif self.external_attraction == ATTRACT_DOWN:
+                for i in range(n):
+                    forces_y[i] += self.strength
+
+            elif self.external_attraction == ATTRACT_LEFT_CENTER:
+                tx = float(UI_WIDTH)
+                ty = HEIGHT * 0.5
+                for i, atom in enumerate(self.atoms):
+                    dx = tx - atom.x
+                    dy = ty - atom.y
+                    dist_sq = dx*dx + dy*dy
+                    if dist_sq < 1e-6:
+                        continue
+                    dist = math.sqrt(dist_sq)
+                    factor = self.strength / dist
+                    forces_x[i] += factor * dx
+                    forces_y[i] += factor * dy
+
+            elif self.external_attraction == ATTRACT_RIGHT_CENTER:
+                tx = float(WIDTH)
+                ty = HEIGHT * 0.5
+                for i, atom in enumerate(self.atoms):
+                    dx = tx - atom.x
+                    dy = ty - atom.y
+                    dist_sq = dx*dx + dy*dy
+                    if dist_sq < 1e-6:
+                        continue
+                    dist = math.sqrt(dist_sq)
+                    factor = self.strength / dist
+                    forces_x[i] += factor * dx
+                    forces_y[i] += factor * dy
+
+            elif self.external_attraction == ATTRACT_TOP_CENTER:
+                tx = (UI_WIDTH + WIDTH) * 0.5
+                ty = 0.0
+                for i, atom in enumerate(self.atoms):
+                    dx = tx - atom.x
+                    dy = ty - atom.y
+                    dist_sq = dx*dx + dy*dy
+                    if dist_sq < 1e-6:
+                        continue
+                    dist = math.sqrt(dist_sq)
+                    factor = self.strength / dist
+                    forces_x[i] += factor * dx
+                    forces_y[i] += factor * dy
+
+            elif self.external_attraction == ATTRACT_BOTTOM_CENTER:
+                tx = (UI_WIDTH + WIDTH) * 0.5
+                ty = float(HEIGHT)
+                for i, atom in enumerate(self.atoms):
+                    dx = tx - atom.x
+                    dy = ty - atom.y
+                    dist_sq = dx*dx + dy*dy
+                    if dist_sq < 1e-6:
+                        continue
+                    dist = math.sqrt(dist_sq)
+                    factor = self.strength / dist
+                    forces_x[i] += factor * dx
+                    forces_y[i] += factor * dy
+
+        # Магнит
         if self.magnet_active:
             for i, atom in enumerate(self.atoms):
                 dx = self.magnet_x - atom.x
@@ -297,6 +453,7 @@ class Simulator:
                 forces_x[i] += mag * dx / dist
                 forces_y[i] += mag * dy / dist
 
+        # Обновление скоростей и позиций
         damping_factor = self.damping ** (dt * DEFAULT_SIM_FPS)
         for i, atom in enumerate(self.atoms):
             ax = forces_x[i] / atom.mass

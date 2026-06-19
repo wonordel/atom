@@ -24,8 +24,8 @@ TODO:
 - [X] Gravity
 - [X] Magnets
 - [X] English
-- [ ] More accurate gravity
+- [X] More accurate gravity
+- [ ] Calculation on multiple cores
 - [ ] Optimization using GPU
 - [ ] Compilation for Linux on Linux
 - [ ] Compilation for Windows on Windows
-- [ ] 
