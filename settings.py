@@ -1,5 +1,5 @@
 WIDTH, HEIGHT = 1500, 980
-UI_WIDTH = 440
+UI_WIDTH = 480
 DEFAULT_RENDER_FPS = 75
 DEFAULT_SIM_FPS = DEFAULT_RENDER_FPS
 MAX_SIM_STEPS_PER_FRAME = 64
@@ -24,6 +24,8 @@ DEFAULT_WALL_BOUNCE = 0.8
 DEFAULT_MASS = 1.0
 MAGNET_STRENGTH = 2000.0
 DEFAULT_ATOM_RADIUS = 5
+DEFAULT_SPAWN_ANGLE = 0.0
+DEFAULT_SPAWN_SPEED = 0.0
 
 # Границы слайдеров
 SLIDER_STRENGTH_MIN = 0
@@ -44,8 +46,11 @@ SLIDER_SIM_FPS_MIN = 1
 SLIDER_SIM_FPS_MAX = 2000
 SLIDER_RENDER_FPS_MIN = 30
 SLIDER_RENDER_FPS_MAX = 240
+SLIDER_SPAWN_ANGLE_MIN = 0
+SLIDER_SPAWN_ANGLE_MAX = 360
+SLIDER_SPAWN_SPEED_MIN = 0
+SLIDER_SPAWN_SPEED_MAX = 1000
 
-# Шаги для точной настройки
 SLIDER_STRENGTH_STEP = 10
 SLIDER_INTERACTION_RADIUS_STEP = 5
 SLIDER_TARGET_DIST_STEP = 0.5
@@ -55,12 +60,12 @@ SLIDER_ATOM_RADIUS_STEP = 1
 SLIDER_MAGNET_STRENGTH_STEP = 50
 SLIDER_SIM_FPS_STEP = 1
 SLIDER_RENDER_FPS_STEP = 1
+SLIDER_SPAWN_ANGLE_STEP = 1
+SLIDER_SPAWN_SPEED_STEP = 10
 
-# Размер кнопок точной настройки
 FINE_TUNE_BUTTON_SIZE = 26
+NUM_PROCESSES = 4
 
-# Количество процессов для распараллеливания расчёта сил (1 – отключено)
-NUM_PROCESSES = 8  # установите, например, 4 или 8 для многоядерности
 
 ATOM_NEUTRAL = 0
 ATOM_POSITIVE = 1
@@ -91,10 +96,13 @@ TEXTS = {
         'damping': "Затухание",
         'wall_bounce': "Отскок от стен",
         'atom_radius': "Размер атома",
+        'spawn_angle': "Угол спавна",
+        'spawn_speed': "Скорость спавна",
         'magnet': "Магнит",
         'sim_fps': "Sim FPS",
         'render_fps': "Render FPS",
         'atom_type': "Тип атома",
+        'spawn_settings': "Настройки спавна",
         'external_attraction': "Внешнее притяжение",
         'mode_repel': "Отталкивание",
         'mode_attract': "Притяжение",
@@ -131,7 +139,7 @@ TEXTS = {
             "P - скорости",
             "Пробел - пауза",
             "R - сброс",
-            "L - переключить язык",
+            "L - переключить язык"
         ]
     },
     'en': {
@@ -143,10 +151,13 @@ TEXTS = {
         'damping': "Damping",
         'wall_bounce': "Wall Bounce",
         'atom_radius': "Atom size",
+        'spawn_angle': "Spawn angle",
+        'spawn_speed': "Spawn speed",
         'magnet': "Magnet",
         'sim_fps': "Sim FPS",
         'render_fps': "Render FPS",
         'atom_type': "Atom type",
+        'spawn_settings': "Spawn settings",
         'external_attraction': "External attraction",
         'mode_repel': "Repel",
         'mode_attract': "Attract",
@@ -183,7 +194,7 @@ TEXTS = {
             "P - velocities",
             "Space - pause",
             "R - reset",
-            "L - toggle language",
+            "L - toggle language"
         ]
     }
 }

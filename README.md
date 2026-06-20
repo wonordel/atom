@@ -26,6 +26,5 @@ TODO:
 - [X] English
 - [X] More accurate gravity
 - [ ] Calculation on multiple cores
-- [ ] Optimization using GPU
 - [ ] Compilation for Linux on Linux
 - [ ] Compilation for Windows on Windows

@@ -1,11 +1,12 @@
 import math
 import random
-from itertools import combinations
+import sys
 from settings import *
 from entities import Atom, Wall
 
+
 # ----------------------------------------------------------------------
-# Функция для параллельного вычисления сил для группы атомов
+# Функция для параллельного вычисления сил для группы атомов (CPU)
 # ----------------------------------------------------------------------
 def _compute_forces_for_group(args):
     """
@@ -17,9 +18,7 @@ def _compute_forces_for_group(args):
      min_dist, mode, target_dist, charge_forces_enabled) = args
 
     n = len(atoms)
-    # Локальные результаты для этой группы
     result = []
-    # Для каждого атома из группы вычисляем силу от всех остальных
     for i in indices:
         a1 = atoms[i]
         fx_total = 0.0
@@ -50,11 +49,11 @@ def _compute_forces_for_group(args):
                 fy_total += fy
                 continue
 
-            if mode == 0:  # MODE_REPEL
+            if mode == MODE_REPEL:
                 mag = strength / r
                 fx = -mag * dir_x
                 fy = -mag * dir_y
-            elif mode == 1:  # MODE_ATTRACT
+            elif mode == MODE_ATTRACT:
                 mag = strength / r
                 fx = mag * dir_x
                 fy = mag * dir_y
@@ -97,7 +96,10 @@ class Simulator:
         self.magnet_x = 0
         self.magnet_y = 0
         self.atom_radius = DEFAULT_ATOM_RADIUS
+        self.spawn_angle = DEFAULT_SPAWN_ANGLE
+        self.spawn_speed = DEFAULT_SPAWN_SPEED
 
+        # Пул процессов (передаётся из main)
         self.pool = pool
         if self.pool is None:
             import multiprocessing as mp
@@ -132,7 +134,11 @@ class Simulator:
     def add_atom(self, x, y, charge=None):
         if charge is None:
             charge = self.selected_atom_charge
-        self.atoms.append(Atom(x, y, charge=charge, radius=self.atom_radius))
+        atom = Atom(x, y, charge=charge, radius=self.atom_radius)
+        angle_rad = math.radians(self.spawn_angle)
+        atom.vx = math.cos(angle_rad) * self.spawn_speed
+        atom.vy = -math.sin(angle_rad) * self.spawn_speed
+        self.atoms.append(atom)
 
     def add_atom_outside(self):
         side = random.choice(['top', 'bottom', 'left', 'right'])
@@ -176,7 +182,7 @@ class Simulator:
         self.update_active_walls()
 
     def compute_force(self, a1, a2):
-        # Оставлен для последовательного режима (не используется при параллельном)
+        # Последовательный расчёт (используется при малом числе атомов)
         dx = a2.x - a1.x
         dy = a2.y - a1.y
         dist_sq = dx*dx + dy*dy
@@ -320,7 +326,7 @@ class Simulator:
         forces_x = [0.0] * n
         forces_y = [0.0] * n
 
-        # Если атомов мало – используем последовательный код (меньше накладных расходов)
+        # Выбор способа расчёта сил (CPU: последовательно или через multiprocessing)
         PARALLEL_THRESHOLD = 80
         if n < PARALLEL_THRESHOLD:
             for i in range(n):
@@ -332,29 +338,22 @@ class Simulator:
                     forces_y[j] -= fy
         else:
             # Разбиваем индексы на группы по числу процессов
-            num_procs = self.pool._processes  # количество процессов в пуле
+            num_procs = self.pool._processes
             indices = list(range(n))
-            # Разбиваем на примерно равные группы
             group_size = max(1, n // num_procs)
             groups = [indices[i:i+group_size] for i in range(0, n, group_size)]
-
-            # Подготавливаем аргументы для каждой группы
             args_list = []
             for group in groups:
                 args = (group, self.atoms, self.strength, self.interaction_radius,
                         self.min_dist, self.mode, self.target_dist, self.charge_forces_enabled)
                 args_list.append(args)
-
-            # Параллельный вызов
             results = self.pool.map(_compute_forces_for_group, args_list)
-
-            # Собираем силы
             for res in results:
                 for i, fx, fy in res:
                     forces_x[i] += fx
                     forces_y[i] += fy
 
-        # Внешнее притяжение (последовательно)
+        # ---- Внешнее притяжение (последовательно) ----
         if self.external_attraction != ATTRACT_NONE:
             if self.external_attraction == ATTRACT_CENTER:
                 cx = (UI_WIDTH + WIDTH) * 0.5
@@ -439,7 +438,7 @@ class Simulator:
                     forces_x[i] += factor * dx
                     forces_y[i] += factor * dy
 
-        # Магнит
+        # ---- Магнит ----
         if self.magnet_active:
             for i, atom in enumerate(self.atoms):
                 dx = self.magnet_x - atom.x
@@ -453,7 +452,7 @@ class Simulator:
                 forces_x[i] += mag * dx / dist
                 forces_y[i] += mag * dy / dist
 
-        # Обновление скоростей и позиций
+        # ---- Обновление скоростей и позиций ----
         damping_factor = self.damping ** (dt * DEFAULT_SIM_FPS)
         for i, atom in enumerate(self.atoms):
             ax = forces_x[i] / atom.mass

@@ -99,6 +99,8 @@ def main():
                     sim.selected_atom_charge = ATOM_NEUTRAL
                     sim.charge_forces_enabled = True
                     sim.set_atom_radius(DEFAULT_ATOM_RADIUS)
+                    sim.spawn_angle = DEFAULT_SPAWN_ANGLE
+                    sim.spawn_speed = DEFAULT_SPAWN_SPEED
                     for i, s in enumerate(ui.sliders):
                         if i == 0: s.value = sim.strength
                         elif i == 1: s.value = sim.interaction_radius
@@ -109,6 +111,8 @@ def main():
                         elif i == 6: s.value = sim.magnet_strength
                         elif i == 7: s.value = sim.sim_fps
                         elif i == 8: s.value = sim.render_fps
+                    ui.spawn_sliders[0].value = sim.spawn_angle
+                    ui.spawn_sliders[1].value = sim.spawn_speed
                 elif event.key == pygame.K_l:
                     ui.toggle_language()
 
